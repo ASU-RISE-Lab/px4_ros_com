@@ -94,7 +94,8 @@ public:
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
-		
+			
+			// check if land mode is set, if not set it in offboard mode
 			if (land_ == 0) {
 			
 				if (offboard_setpoint_counter_ == 10) {
@@ -115,7 +116,8 @@ public:
 				offboard_setpoint_counter_++;
 				}
 			}
-
+			
+			// If land mode is true, shift to land mode from offboard mode
 			else {
 				this->land();
 			}
