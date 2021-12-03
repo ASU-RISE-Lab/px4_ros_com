@@ -46,12 +46,14 @@ find_package("${rmw_implementation}" REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 find_package(PythonInterp 3 REQUIRED)
 if(ROS_DISTRO IN_LIST ROS_DISTROS)
   find_package(eigen3_cmake_module REQUIRED)
 endif()
-find_package(Eigen3 REQUIRED NO_MODULE)
+find_package(Eigen3 REQUIRED)
 
 ###################################
 # Generate micro-RTPS agent code ##
@@ -72,6 +74,7 @@ function(custom_executable subfolder target)
   ament_target_dependencies(${target}
     rclcpp
     px4_msgs
+    Eigen3
   )
   install(TARGETS ${target}
   DESTINATION lib/${PROJECT_NAME})
@@ -96,6 +99,7 @@ custom_executable(examples/listeners sensor_combined_listener)
 custom_executable(examples/listeners vehicle_gps_position_listener)
 custom_executable(examples/advertisers debug_vect_advertiser)
 custom_executable(examples/offboard offboard_control)
+custom_executable(examples/offboard offboard_control_box)
 
 ############
 # Install ##
