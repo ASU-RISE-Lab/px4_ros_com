@@ -94,26 +94,29 @@ public:
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
+		
+			if (land_ == 0) {
+			
+				if (offboard_setpoint_counter_ == 10) {
+					// Change to Offboard mode after 10 setpoints
+					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
-			if (offboard_setpoint_counter_ == 10) {
-				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+					// Arm the vehicle
+					this->arm();
+				}
 
-				// Arm the vehicle
-				this->arm();
-			}
+            			// offboard_control_mode needs to be paired with trajectory_setpoint
+				publish_offboard_control_mode();
+				i_ = counter(i_);
+				publish_trajectory_setpoint();
 
-            // offboard_control_mode needs to be paired with trajectory_setpoint
-			publish_offboard_control_mode();
-			i_ = counter(i_);
-			publish_trajectory_setpoint();
-
-           		 // stop the counter after reaching 11
-			if (offboard_setpoint_counter_ < 11) {
+           		 	// stop the counter after reaching 11
+				if (offboard_setpoint_counter_ < 11) {
 				offboard_setpoint_counter_++;
+				}
 			}
 
-			if (land_ == 1) {
+			else {
 				this->land();
 			}
 
