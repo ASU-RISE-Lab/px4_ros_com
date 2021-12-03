@@ -95,7 +95,7 @@ public:
 
 		auto timer_callback = [this]() -> void {
 			
-			// check if land mode is set, if not set it in offboard mode
+			// Check if land mode is set, if not set it in offboard mode
 			if (land_ == 0) {
 			
 				if (offboard_setpoint_counter_ == 10) {
