@@ -120,6 +120,7 @@ public:
 			// If land mode is true, shift to land mode from offboard mode
 			else {
 				this->land();
+				rclcpp::shutdown();
 			}
 
 		};
@@ -147,9 +148,9 @@ private:
 	int land_ = 0;
 	int reach_flag = 0;
 
-	float x_sp[5] = {0,1.0,1.0,0.0,0.0};
-	float y_sp[5] = {0,0.0,1.0,1.0,0.0};
-	float z_sp = -1.2;
+	float x_sp[5] = {0,0.5,0.5,0.0,0.0};
+	float y_sp[5] = {0,0.0,-0.5,-0.5,0.0};
+	float z_sp = -0.5;
 
 	time_t reach_time,current_time; // Noting time at each waypoint
 	double duration; // Noting takeoff duration
@@ -223,7 +224,7 @@ int OffboardControlBox::counter(int i_) {
 		error = pow(((x_sp[i_] - x)*(x_sp[i_] - x) + (y_sp[i_] - y)*(y_sp[i_] - y) + (z_sp - z)*(z_sp - z)),0.5);
 	}
 
-	if ((abs(error) < 0.04) && reach_flag == 0){
+	if ((abs(error) < 0.05) && reach_flag == 0){
 		reach_time = time(0);
 		reach_flag = 1;
 	}
