@@ -62,7 +62,6 @@ using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 using std::placeholders::_1;
 
-
 class OffboardControlBox : public rclcpp::Node {
 public:
 	OffboardControlBox() : Node("offboard_control_box") {
@@ -148,18 +147,10 @@ private:
 	int i_ = 0;
 	int land_ = 0;
 	int reach_flag = 0;
-	
-	// Drone Studio
-	// float x_sp[6] = {0,0.5,0.5,0.0,0.0,0.0};
-	// float y_sp[6] = {0,0.0,-0.5,-0.5,0.0,0.0};
-	// float z_sp[6] = {-0.75,-0.75,-0.75,-0.75,-0.75,-0.25};
-	
-	// 179v1
-	// float x_sp[6] = {-0.75,0.25,0.25,-0.75,-0.75,-0.75};
-	
-	float x_sp[6] = {0,1,1,0,0,0};
-	float y_sp[6] = {-0.6,-0.6,-1.75,-1.75,-0.6,-0.6};
-	float z_sp[6] = {-0.75,-0.75,-0.75,-0.75,-0.75,-0.31};
+
+	float x_sp[5] = {0,0.5,0.5,0.0,0.0};
+	float y_sp[5] = {0,0.0,-0.5,-0.5,0.0};
+	float z_sp = -0.5;
 
 	time_t reach_time,current_time; // Noting time at each waypoint
 	double duration; // Noting takeoff duration
@@ -195,7 +186,7 @@ void OffboardControlBox::disarm() const {
  * @brief Send a command to Land the vehicle
  */
 void OffboardControlBox::land() const {
-	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND, 0.0);
+	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND, 1.0);
 
 	RCLCPP_INFO(this->get_logger(), "Land command send");
 }
@@ -227,13 +218,13 @@ void OffboardControlBox::publish_offboard_control_mode() {
  */
 int OffboardControlBox::counter(int i_) {
 	if (i_ == 0) {
-		error = z_sp[i_] - z;
+		error = z_sp - z;
 	}
 	else {
-		error = pow(((x_sp[i_] - x)*(x_sp[i_] - x) + (y_sp[i_] - y)*(y_sp[i_] - y) + (z_sp[i_] - z)*(z_sp[i_] - z)),0.5);
+		error = pow(((x_sp[i_] - x)*(x_sp[i_] - x) + (y_sp[i_] - y)*(y_sp[i_] - y) + (z_sp - z)*(z_sp - z)),0.5);
 	}
 
-	if ((abs(error) < 0.03) && reach_flag == 0){
+	if ((abs(error) < 0.05) && reach_flag == 0){
 		reach_time = time(0);
 		reach_flag = 1;
 	}
@@ -255,9 +246,15 @@ void OffboardControlBox::publish_trajectory_setpoint() const {
 
 	TrajectorySetpoint msg{};
 	msg.timestamp = timestamp_.load();
-	msg.x = x_sp[i_];
-	msg.y = y_sp[i_];
-	msg.z = z_sp[i_];
+	if (i_ == 0) {
+		msg.x = x;
+		msg.y = y;
+	}
+	else {
+		msg.x = x_sp[i_];
+		msg.y = y_sp[i_];
+	}
+	msg.z = z_sp;
 	msg.yaw = 0.0; // [-PI:PI]
 
 	std::cout << "x is " << msg.x << std::endl;
