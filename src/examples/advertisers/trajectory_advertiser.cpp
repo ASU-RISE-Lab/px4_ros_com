@@ -63,7 +63,7 @@ public:
                                 trajectory_sp.timestamp, trajectory_sp.x, trajectory_sp.y, trajectory_sp.z);
             this->publisher_->publish(trajectory_sp);
         };
-        timer_ = this->create_wall_timer(500ms, timer_callback);
+        timer_ = this->create_wall_timer(100ms, timer_callback);
     }
 
 private:
