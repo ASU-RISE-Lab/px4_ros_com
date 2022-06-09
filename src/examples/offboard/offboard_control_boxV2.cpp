@@ -48,8 +48,11 @@
 #include <px4_msgs/msg/timesync.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
+#include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
+
+#include <Eigen/Dense>
 
 #include <chrono>
 #include <iostream>
@@ -57,10 +60,11 @@
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
+using std::placeholders::_1;
 
-class OffboardControl : public rclcpp::Node {
+class OffboardControlBox : public rclcpp::Node {
 public:
-	OffboardControl() : Node("offboard_control") {
+	OffboardControlBox() : Node("offboard_control_box") {
 #ifdef ROS_DEFAULT_API
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("OffboardControlMode_PubSubTopic", 10);
@@ -84,32 +88,48 @@ public:
 					timestamp_.store(msg->timestamp);
 				});
 
+		// Subscribing to lpos data
+		lpos_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("VehicleLocalPosition_PubSubTopic",10,std::bind(&OffboardControlBox::lpos_callback, this, _1));
+
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
+			
+			// Check if land mode is set, if not set it in offboard mode
+			if (land_ == 0) {
+			
+				if (offboard_setpoint_counter_ == 10) {
+					// Change to Offboard mode after 10 setpoints
+					this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
-			if (offboard_setpoint_counter_ == 10) {
-				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+					// Arm the vehicle
+					this->arm();
+				}
 
-				// Arm the vehicle
-				this->arm();
-			}
+            			// offboard_control_mode needs to be paired with trajectory_setpoint
+				publish_offboard_control_mode();
+				i_ = counter(i_);
+				publish_trajectory_setpoint();
 
-            		// offboard_control_mode needs to be paired with trajectory_setpoint
-			publish_offboard_control_mode();
-			publish_trajectory_setpoint();
-
-           		 // stop the counter after reaching 11
-			if (offboard_setpoint_counter_ < 11) {
+           		 	// stop the counter after reaching 11
+				if (offboard_setpoint_counter_ < 11) {
 				offboard_setpoint_counter_++;
+				}
 			}
+			
+			// If land mode is true, shift to land mode from offboard mode
+			else {
+				this->land();
+				rclcpp::shutdown();
+			}
+
 		};
 		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
 
 	void arm() const;
 	void disarm() const;
+	void land() const;
 
 private:
 	rclcpp::TimerBase::SharedPtr timer_;
@@ -118,21 +138,41 @@ private:
 	rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
+	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr lpos_sub_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
-	void publish_offboard_control_mode() const;
+	int i_ = 0;
+	int land_ = 0;
+	int reach_flag = 0;
+	
+	// Drone Studio
+	// float x_sp[6] = {0,0.5,0.5,0.0,0.0,0.0};
+	// float y_sp[6] = {0,0.0,-0.5,-0.5,0.0,0.0};
+	// float z_sp[6] = {-0.75,-0.75,-0.75,-0.75,-0.75,-0.25};
+	
+	float x_sp[6] = {-0.75,0.25,0.25,-0.75,-0.75,-0.75};
+	float y_sp[6] = {-0.6,-0.6,-1.35,-1.35,-0.6,-0.6};
+	float z_sp[6] = {-0.75,-0.75,-0.75,-0.75,-0.75,-0.25};
+
+	time_t reach_time,current_time; // Noting time at each waypoint
+	double duration; // Noting takeoff duration
+
+	float x,y,z,error;
+
+	void publish_offboard_control_mode();
+	int counter(int i_);
 	void publish_trajectory_setpoint() const;
-	void publish_vehicle_command(uint16_t command, float param1 = 0.0,
-				     float param2 = 0.0) const;
+	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0) const;
+	void lpos_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg);
 };
 
 /**
  * @brief Send a command to Arm the vehicle
  */
-void OffboardControl::arm() const {
+void OffboardControlBox::arm() const {
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
 
 	RCLCPP_INFO(this->get_logger(), "Arm command send");
@@ -141,20 +181,34 @@ void OffboardControl::arm() const {
 /**
  * @brief Send a command to Disarm the vehicle
  */
-void OffboardControl::disarm() const {
+void OffboardControlBox::disarm() const {
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
 
 	RCLCPP_INFO(this->get_logger(), "Disarm command send");
 }
 
 /**
+ * @brief Send a command to Land the vehicle
+ */
+void OffboardControlBox::land() const {
+	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_NAV_LAND, 1.0);
+
+	RCLCPP_INFO(this->get_logger(), "Land command send");
+}
+
+
+/**
  * @brief Publish the offboard control mode.
  *        For this example, only position and altitude controls are active.
  */
-void OffboardControl::publish_offboard_control_mode() const {
+void OffboardControlBox::publish_offboard_control_mode() {
 	OffboardControlMode msg{};
 	msg.timestamp = timestamp_.load();
 	msg.position = true;
+	// mode switch state machine
+	if ((land_ ==  0) && i_ == 5) {
+		land_ = 1;
+	}
 	msg.velocity = false;
 	msg.acceleration = false;
 	msg.attitude = false;
@@ -165,17 +219,52 @@ void OffboardControl::publish_offboard_control_mode() const {
 
 
 /**
+ * @brief Calculating the errors for increamenting the next waypoint counter
+ */
+int OffboardControlBox::counter(int i_) {
+	if (i_ == 0) {
+		error = z_sp[i_] - z;
+	}
+	else {
+		error = pow(((x_sp[i_] - x)*(x_sp[i_] - x) + (y_sp[i_] - y)*(y_sp[i_] - y) + (z_sp[i_] - z)*(z_sp[i_] - z)),0.5);
+	}
+
+	if ((abs(error) < 0.05) && reach_flag == 0){
+		reach_time = time(0);
+		reach_flag = 1;
+	}
+	current_time = time(0);
+	if (difftime(current_time,reach_time) > 5 && (reach_flag == 1)) {
+		i_++;
+		reach_flag = 0;
+		reach_time = 0;
+	}
+	return i_;
+}
+
+/**
  * @brief Publish a trajectory setpoint
  *        For this example, it sends a trajectory setpoint to make the
  *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
  */
-void OffboardControl::publish_trajectory_setpoint() const {
+void OffboardControlBox::publish_trajectory_setpoint() const {
+
 	TrajectorySetpoint msg{};
 	msg.timestamp = timestamp_.load();
-	msg.x = 0.0;
-	msg.y = 0.0;
-	msg.z = -0.75;
-	msg.yaw = 0; // [-PI:PI]
+	if (i_ == 0) {
+		msg.x = x;
+		msg.y = y;
+	}
+	else {
+		msg.x = x_sp[i_];
+		msg.y = y_sp[i_];
+	}
+	msg.z = z_sp[i_];
+	msg.yaw = 0.0; // [-PI:PI]
+
+	std::cout << "x is " << msg.x << std::endl;
+	std::cout << "waypoint count" << i_ << std::endl;
+	std::cout << "tracking error" << error << std::endl;
 
 	trajectory_setpoint_publisher_->publish(msg);
 }
@@ -186,7 +275,7 @@ void OffboardControl::publish_trajectory_setpoint() const {
  * @param param1    Command parameter 1
  * @param param2    Command parameter 2
  */
-void OffboardControl::publish_vehicle_command(uint16_t command, float param1,
+void OffboardControlBox::publish_vehicle_command(uint16_t command, float param1,
 					      float param2) const {
 	VehicleCommand msg{};
 	msg.timestamp = timestamp_.load();
@@ -202,11 +291,18 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1,
 	vehicle_command_publisher_->publish(msg);
 }
 
+void OffboardControlBox::lpos_callback(const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) {
+	x = msg->x;
+	y = msg->y;
+	z = msg->z;
+	// std::cout <<"Looks like current x, x is" << x << std::endl;
+}
+
 int main(int argc, char* argv[]) {
 	std::cout << "Starting offboard control node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<OffboardControl>());
+	rclcpp::spin(std::make_shared<OffboardControlBox>());
 
 	rclcpp::shutdown();
 	return 0;
