@@ -364,14 +364,10 @@ int main(int argc, char **argv)
 		if (!receiving) { start = std::chrono::steady_clock::now(); }
 
 		// Publish messages received from UART
-		length = transport_node->read();
-		if (length > 0) {
-			total_read += length;
-		}
-
-		while (transport_node->parse(&topic_ID, data_buffer, BUFFER_SIZE)) {
+		if (0 < (length = transport_node->read(&topic_ID, data_buffer, BUFFER_SIZE))) {
 			topics->publish(topic_ID, data_buffer, sizeof(data_buffer));
 			++received;
+			total_read += length;
 			receiving = true;
 			end = std::chrono::steady_clock::now();
 		}
