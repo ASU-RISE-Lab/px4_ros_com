@@ -49,13 +49,7 @@ rtps:
   - base: VehicleTrajectoryWaypoint
     msg: VehicleTrajectoryWaypointDesired
     send: true
-  - msg: CollisionConstraints
-    send: true
   - msg: OnboardComputerStatus
-    receive: true
-  - msg: TrajectoryBezier
-    receive: true
-  - msg: VehicleTrajectoryBezier
     receive: true
   - msg: TimesyncStatus
     send: true
@@ -63,3 +57,7 @@ rtps:
     send: true
   - msg: VehicleAttitude
     send: true
+#  - msg: VehicleTorqueSetpoint
+#    send: true
+#  - msg: VehicleThrustSetpoint
+#    send: true
