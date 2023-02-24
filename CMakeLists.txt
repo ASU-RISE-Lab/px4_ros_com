@@ -101,7 +101,7 @@ custom_executable(examples/listeners vehicle_gps_position_listener)
 custom_executable(examples/advertisers debug_vect_advertiser)
 custom_executable(examples/offboard offboard_control)
 custom_executable(examples/offboard offboard_control_perch)
-custom_executable(examples/offboard offboard_control_perch_and_recover)
+custom_executable(examples/offboard offboard_control_recover)
 
 ############
 # Install ##
