@@ -48,6 +48,7 @@
 #include <px4_msgs/msg/timesync.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
+#include <px4_msgs/msg/gripper_engage_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
@@ -58,9 +59,9 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
-class OffboardControl : public rclcpp::Node {
+class OffboardControlRecovery : public rclcpp::Node {
 public:
-	OffboardControl() : Node("offboard_control") {
+	OffboardControlRecovery() : Node("offboard_control_recovery") {
 #ifdef ROS_DEFAULT_API
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in", 10);
@@ -68,6 +69,8 @@ public:
 			this->create_publisher<TrajectorySetpoint>("fmu/trajectory_setpoint/in", 10);
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in", 10);
+		gripper_status_publisher_ = 
+			this->create_publisher<GripperEngageStatus>("/fmu/gripper_engage_status/in", 10);
 #else
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in");
@@ -75,6 +78,8 @@ public:
 			this->create_publisher<TrajectorySetpoint>("fmu/trajectory_setpoint/in");
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in");
+		gripper_status_publisher_ = 
+			this->create_publisher<GripperEngageStatus>("/fmu/gripper_engage_status/in");
 #endif
 
 		// get common timestamp
@@ -118,6 +123,7 @@ private:
 	rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
+	rclcpp::Publisher<px4_msgs::msg::GripperEngageStatus>::SharedPtr gripper_status_publisher_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
@@ -132,7 +138,7 @@ private:
 /**
  * @brief Send a command to Arm the vehicle
  */
-void OffboardControl::arm() const {
+void OffboardControlRecovery::arm() const {
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
 
 	RCLCPP_INFO(this->get_logger(), "Arm command send");
@@ -141,7 +147,7 @@ void OffboardControl::arm() const {
 /**
  * @brief Send a command to Disarm the vehicle
  */
-void OffboardControl::disarm() const {
+void OffboardControlRecovery::disarm() const {
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
 
 	RCLCPP_INFO(this->get_logger(), "Disarm command send");
@@ -151,7 +157,7 @@ void OffboardControl::disarm() const {
  * @brief Publish the offboard control mode.
  *        For this example, only position and altitude controls are active.
  */
-void OffboardControl::publish_offboard_control_mode() const {
+void OffboardControlRecovery::publish_offboard_control_mode() const {
 	OffboardControlMode msg{};
 	msg.timestamp = timestamp_.load();
 	msg.position = true;
@@ -169,15 +175,21 @@ void OffboardControl::publish_offboard_control_mode() const {
  *        For this example, it sends a trajectory setpoint to make the
  *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
  */
-void OffboardControl::publish_trajectory_setpoint() const {
+void OffboardControlRecovery::publish_trajectory_setpoint() const {
 	TrajectorySetpoint msg{};
 	msg.timestamp = timestamp_.load();
-	msg.x = 0.9;
+	msg.x = 0.5;
 	msg.y = 0.0;
-	msg.z = -1.2;
+	msg.z = -0.8;
 	msg.yaw = 0.0; // [-PI:PI]
 
 	trajectory_setpoint_publisher_->publish(msg);
+
+	GripperEngageStatus gripper_msg{};
+	gripper_msg.timestamp = timestamp_.load();
+	gripper_msg.status = false;
+
+	gripper_status_publisher_->publish(gripper_msg);
 }
 
 /**
@@ -186,7 +198,7 @@ void OffboardControl::publish_trajectory_setpoint() const {
  * @param param1    Command parameter 1
  * @param param2    Command parameter 2
  */
-void OffboardControl::publish_vehicle_command(uint16_t command, float param1,
+void OffboardControlRecovery::publish_vehicle_command(uint16_t command, float param1,
 					      float param2) const {
 	VehicleCommand msg{};
 	msg.timestamp = timestamp_.load();
@@ -203,10 +215,10 @@ void OffboardControl::publish_vehicle_command(uint16_t command, float param1,
 }
 
 int main(int argc, char* argv[]) {
-	std::cout << "Starting offboard control node..." << std::endl;
+	std::cout << "Starting offboard control node for recovery ..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<OffboardControl>());
+	rclcpp::spin(std::make_shared<OffboardControlRecovery>());
 
 	rclcpp::shutdown();
 	return 0;
